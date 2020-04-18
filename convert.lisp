@@ -217,8 +217,8 @@
 
 :logic
 :q
-(save-exec "my-acl2" nil
+(save-exec "smtlib-to-acl2" nil
            :return-from-lp
            '(mv-let (argv state) (oslib::argv)
-                (mv-let (defs state) (process-file argv state)
+                (mv-let (defs state) (process-file (car argv) state)
                     (ld defs :ld-pre-eval-print t))))
