@@ -183,9 +183,9 @@
     (list 'defun name args (cons 'cond cases))
 )
 
-(defun preprocess-cases (cases)
+(defun add-else-case (cases)
     (cond ((equal (length cases) 1) (list (list 't (cadar cases))))
-        (t (cons (car cases) (preprocess-cases (cdr cases)))))
+        (t (cons (car cases) (add-else-case (cdr cases)))))
 )
 
 (defun create-defuns1 (func-list func-alist)
@@ -193,7 +193,7 @@
         (t (let* (
             (name (caar func-list))
             (args (cadr (assoc-equal name func-alist)))
-            (cases (preprocess-cases (cdar func-list))))
+            (cases (add-else-case (cdar func-list))))
                 (cons (create-defun name args cases)
                     (create-defuns1 (cdr func-list) func-alist)))))
 )
