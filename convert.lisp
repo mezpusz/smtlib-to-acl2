@@ -1,9 +1,17 @@
-
-(include-book "oslib/argv" :dir :system)
-(include-book "io" :load-compiled-file nil)
-
 :set-state-ok t
 :program
+(set-ld-error-action :return! state)
+
+(include-book "oslib/argv" :dir :system)
+(include-book "std/util/defaggregate" :dir :system)
+
+(include-book "io" :load-compiled-file nil)
+
+(std::defaggregate definitions
+    ((types listp)
+    (funcs listp)
+    (func-cases listp)
+    (conjectures listp)))
 
 ; associates all args with a selector
 ; for their position in the argument list
@@ -128,40 +136,33 @@
                 (list (create-case type-alist (cadr kv) (caddr kv) def))) func-cases-alist))
 )
 
-(defun process-object (obj type-alist func-alist func-cases-alist conjectures)
+(defun process-object (obj defs)
     (let ((fn (car obj)) (args (cdr obj)))
         (cond
             ((equal fn 'declare-fun)
-                (mv type-alist
-                    (process-declare-fun args func-alist)
-                    func-cases-alist
-                    conjectures))
+                (change-definitions defs :funcs
+                    (process-declare-fun args (definitions->funcs defs))))
             ((equal fn 'declare-datatypes)
-                (mv (add-datatypes args type-alist)
-                    func-alist
-                    func-cases-alist
-                    conjectures))
+                (change-definitions defs :types
+                    (add-datatypes args (definitions->types defs))))
             ((equal fn 'assert)
                 (cond
                     ((equal (caar args) 'not)
-                        (mv type-alist
-                            func-alist
-                            func-cases-alist
-                            (append conjectures (add-conjecture (cadar args)))))
+                        (change-definitions defs :conjectures
+                            (append (definitions->conjectures defs)
+                                (add-conjecture (cadar args)))))
                     (t
-                        (mv type-alist
-                            func-alist
+                        (change-definitions defs :func-cases
                             (process-assert
-                            (car args) type-alist func-alist func-cases-alist)
-                            conjectures))))
-            (t (mv type-alist func-alist func-cases-alist conjectures))
-)))
+                                (car args) (definitions->types defs)
+                                (definitions->funcs defs) (definitions->func-cases defs))))))
+            (t defs)))
+)
 
-(defun process-objects (objects type-alist func-alist func-cases-alist conjectures)
-    (cond ((null objects) (mv type-alist func-alist func-cases-alist conjectures))
-        (t (mv-let (type-alist func-alist func-cases-alist conjectures)
-            (process-object (car objects) type-alist func-alist func-cases-alist conjectures)
-            (process-objects (cdr objects) type-alist func-alist func-cases-alist conjectures))))
+(defun process-objects (objs defs)
+    (cond ((null objs) defs)
+        (t (let ((defs (process-object (car objs) defs)))
+            (process-objects (cdr objs) defs))))
 )
 
 (defun create-defun (name args cases)
@@ -201,17 +202,22 @@
         (t (append (create-ctor-defuns1 (cdar type-list)) (create-ctor-defuns (cdr type-list)))))
 )
 
-(defun create-defuns (type-alist func-list func-alist)
-    (append (create-ctor-defuns type-alist)
-        (create-defuns1 func-list func-alist))
+(defun create-defuns (defs)
+    (append (create-ctor-defuns (definitions->types defs))
+        (create-defuns1 (definitions->func-cases defs)
+                        (definitions->funcs defs)))
 )
 
 (defun process-file (filename state)
-    (mv-let (result state) (read-smt-file filename state)
-        (mv-let (type-alist func-alist func-cases-alist conjectures)
-            (process-objects result nil nil nil nil)
-            (mv (append (create-defuns type-alist func-cases-alist func-alist)
-                    conjectures) state)))
+    (mv-let (objs state) (read-smt-file filename state)
+        (let ((defs
+            (process-objects objs (make-definitions :types nil
+                                                    :funcs nil
+                                                    :func-cases nil
+                                                    :conjectures nil))))
+            (mv (append (create-defuns defs)
+                    (definitions->conjectures defs))
+                state)))
 )
 
 ; Add these to the beginning of the block to be debugged
