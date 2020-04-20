@@ -231,6 +231,13 @@
                     conjectures) state)))
 )
 
+; Add these to the beginning of the block to be debugged
+;; (let ((x (break$)))
+;; (declare (ignore x))
+
+; Uncomment this to enable debugging
+;; (set-debugger-enable t)
+
 :logic
 :q
 (save-exec "smtlib-to-acl2" nil
