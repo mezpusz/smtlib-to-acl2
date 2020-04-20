@@ -32,7 +32,7 @@
 ; creates a predicate for a list variable
 ; based on its length
 (defun create-pred (len var)
-    (cond ((equal len 0) (list 'endp var))
+    (cond ((zp len) (list 'endp var))
         ; ACL2 only accepts the function definitions
         ; if there is an else branch; this branch is
         ; now the second ctor but it won't work as soon
@@ -47,15 +47,18 @@
 ; all arguments in the args based on their types
 ; (which now concerns only the length of ctors)
 (defun create-cond (ctors arg-alist arg-types args)
-    (cond ((null args) 't)
-        ((listp (car args))
-            (let* (
-                (ctor-list (cdr (assoc-equal (car arg-types) ctors)))
-                (ctor-len (cdr (assoc-equal (caar args) ctor-list)))
-                (var (cdr (assoc-equal (car args) arg-alist))))
-            (list 'and (create-pred ctor-len var)
-                (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
-        (t (create-cond ctors arg-alist (cdr arg-types) (cdr args))))
+    (let ((ctor-list (cdr (assoc-equal (car arg-types) ctors)))
+        (var (cdr (assoc-equal (car args) arg-alist))))
+        (cond ((null args) 't)
+            ((listp (car args))
+                (let ((ctor-len (cdr (assoc-equal (caar args) ctor-list))))
+                (list 'and (create-pred ctor-len var)
+                    (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
+            ((assoc-equal (car args) (cdr (assoc-equal (car arg-types) ctors)))
+                (let ((ctor-len (cdr (assoc-equal (car args) ctor-list))))
+                (list 'and (create-pred ctor-len var)
+                    (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
+            (t (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
 )
 
 (defun create-case1 (ctors arg-names arg-types def)
