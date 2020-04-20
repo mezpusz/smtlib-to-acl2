@@ -4,13 +4,17 @@
 :set-state-ok t
 :program
 
+; associates all args with a selector
+; for their position in the argument list
+; in the given alist result
 (defun car-cdr-gen (args var result)
     (cond ((null args) result)
         (t (car-cdr-gen (cdr args) (list 'cdr var)
-            ;; (cons (list (car args) . (list (list 'car var))) result)))
             (put-assoc-eq (car args) (list 'car var) result)))
 ))
 
+; maps a list of arguments to variable names;
+; compound terms are mapped recursively
 (defun map-arguments (arg-names args result)
     (cond ((null args) result)
         ; if argument is a variable (or a base ctor),
@@ -25,14 +29,23 @@
                 (car-cdr-gen (cdar args) (car arg-names) result)))))
 )
 
+; creates a predicate for a list variable
+; based on its length
 (defun create-pred (len var)
     (cond ((equal len 0) (list 'endp var))
+        ; ACL2 only accepts the function definitions
+        ; if there is an else branch; this branch is
+        ; now the second ctor but it won't work as soon
+        ; as there are more than one compound ctors
         ;; ((> len 1)
         ;;     (list (quote and) (list 'consp var)
         ;;         (list 'equal (list 'length var) len)))
         (t 't))
 )
 
+; creates a conjuct for all predicates made for
+; all arguments in the args based on their types
+; (which now concerns only the length of ctors)
 (defun create-cond (ctors arg-alist arg-types args)
     (cond ((null args) 't)
         ((listp (car args))
