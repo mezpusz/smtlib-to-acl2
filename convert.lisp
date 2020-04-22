@@ -67,19 +67,12 @@
 (defun create-case-eq (ctors arg-names arg-types def)
     (let ((arg-alist (map-arguments arg-names (cdr (second def)) nil)))
         (list (cons 'and (create-cond ctors arg-alist arg-types (cdr (second def))))
-            (mv-let (changedp val)
-                (sublis-var1 arg-alist (third def))
-                (declare (ignore changedp))
-                val)))
+                (sublis arg-alist (third def))))
 )
 
 (defun create-case-lit (ctors arg-names arg-types def pol)
     (let ((arg-alist (map-arguments arg-names (cdr def) nil)))
-        (list (mv-let (changedp val)
-                (sublis-var1 arg-alist
-                    (create-cond ctors arg-alist arg-types (cdr def)))
-                (declare (ignore changedp))
-                (cons 'and val)) pol))
+        (list (cons 'and (sublis arg-alist (create-cond ctors arg-alist arg-types (cdr def)))) pol))
 )
 
 (defun create-case (ctors arg-names arg-types def pol)
