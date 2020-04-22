@@ -123,6 +123,15 @@
             (list (list 'defthm 'theorem def))))
 )
 
+(defun wrap-conjecture (conj enable)
+    (cond (enable (list (list 'with-output
+            ':off ':all
+            ;; ':on '(prove summary)
+            ':on '(summary)
+            ':gag-mode 'nil (car conj))))
+        (t conj))
+)
+
 (defun get-function-symbol (def)
     (cond
         ((equal (car def) 'forall) (get-function-symbol (caddr def)))
@@ -164,7 +173,7 @@
                     ((equal (caar args) 'not)
                         (change-definitions defs :conjectures
                             (append (definitions->conjectures defs)
-                                (add-conjecture (cadar args)))))
+                                (wrap-conjecture (add-conjecture (cadar args)) t))))
                     (t
                         (change-definitions defs :func-cases
                             (process-assert
@@ -180,7 +189,9 @@
 )
 
 (defun create-defun (name args cases)
-    (list 'defun name args (cons 'cond cases))
+    (list 'with-output
+            ':off ':all
+            (list 'defun name args (cons 'cond cases)))
 )
 
 (defun add-else-case (cases)
@@ -227,13 +238,18 @@
                         (definitions->funcs defs)))
 )
 
+(defun rename-defined-objects (objs)
+    (sublis (list (cons 'cons 'cons_)
+            (cons 't 't_)) objs)
+)
+
 (defun process-file (filename state)
     (mv-let (objs state) (read-smt-file filename state)
-        (let ((defs
-            (process-objects objs (make-definitions :types nil
-                                                    :funcs nil
-                                                    :func-cases nil
-                                                    :conjectures nil))))
+        (let* ((proc-objs (rename-defined-objects objs))
+            (defs (process-objects proc-objs (make-definitions :types nil
+                                                          :funcs nil
+                                                          :func-cases nil
+                                                          :conjectures nil))))
             (mv (append (create-defuns defs)
                     (definitions->conjectures defs))
                 state)))
