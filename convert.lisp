@@ -64,9 +64,15 @@
             (t (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
 )
 
+(defun conjunct-conds (conds)
+    (cond
+        ((> (length conds) 1) (cons 'and conds))
+        (t (car conds)))
+)
+
 (defun create-case-eq (ctors arg-names arg-types def)
     (let ((arg-alist (map-arguments arg-names (cdr (second def)) nil)))
-        (list (cons 'and (create-cond ctors arg-alist arg-types (cdr (second def))))
+        (list (conjunct-conds (create-cond ctors arg-alist arg-types (cdr (second def))))
             (mv-let (changedp val)
                 (sublis-var1 arg-alist (third def))
                 (declare (ignore changedp))
@@ -79,7 +85,7 @@
                 (sublis-var1 arg-alist
                     (create-cond ctors arg-alist arg-types (cdr def)))
                 (declare (ignore changedp))
-                (cons 'and val)) pol))
+                (conjunct-conds val)) pol))
 )
 
 (defun create-case (ctors arg-names arg-types def pol)
