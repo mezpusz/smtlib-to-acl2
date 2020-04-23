@@ -13,6 +13,13 @@
     (func-cases listp)
     (conjectures listp)))
 
+(defconst *redefine-list*
+    (list (cons 'cons 'cons_)
+          (cons 't 't_)
+          (cons 'equal 'equal_)
+          (cons 'false '(not t)))
+)
+
 ; associates all args with a selector
 ; for their position in the argument list
 ; in the given alist result
@@ -240,8 +247,7 @@
 )
 
 (defun rename-defined-objects (objs)
-    (sublis (list (cons 'cons 'cons_)
-            (cons 't 't_)) objs)
+    (sublis *redefine-list* objs)
 )
 
 (defun process-file (filename state)
