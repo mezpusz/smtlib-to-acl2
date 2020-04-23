@@ -49,19 +49,19 @@
 ; creates a conjuct for all predicates made for
 ; all arguments in the args based on their types
 ; (which now concerns only the length of ctors)
-(defun create-cond (ctors arg-alist arg-types args)
+(defun create-cond (ctors arg-names arg-types args)
     (let ((ctor-list (cdr (assoc-equal (car arg-types) ctors)))
-        (var (cdr (assoc-equal (car args) arg-alist))))
+        (var (car arg-names)))
         (cond ((null args) nil)
             ((listp (car args))
                 (let ((ctor-len (cdr (assoc-equal (caar args) ctor-list))))
                 (append (create-pred ctor-len var)
-                    (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
+                    (create-cond ctors (cdr arg-names) (cdr arg-types) (cdr args)))))
             ((assoc-equal (car args) (cdr (assoc-equal (car arg-types) ctors)))
                 (let ((ctor-len (cdr (assoc-equal (car args) ctor-list))))
                 (append (create-pred ctor-len var)
-                    (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
-            (t (create-cond ctors arg-alist (cdr arg-types) (cdr args)))))
+                    (create-cond ctors (cdr arg-names) (cdr arg-types) (cdr args)))))
+            (t (create-cond ctors (cdr arg-names) (cdr arg-types) (cdr args)))))
 )
 
 (defun conjunct-conds (conds)
@@ -72,7 +72,7 @@
 
 (defun create-case-eq (ctors arg-names arg-types def)
     (let ((arg-alist (map-arguments arg-names (cdr (second def)) nil)))
-        (list (conjunct-conds (create-cond ctors arg-alist arg-types (cdr (second def))))
+        (list (conjunct-conds (create-cond ctors arg-names arg-types (cdr (second def))))
             (mv-let (changedp val)
                 (sublis-var1 arg-alist (third def))
                 (declare (ignore changedp))
@@ -80,12 +80,7 @@
 )
 
 (defun create-case-lit (ctors arg-names arg-types def pol)
-    (let ((arg-alist (map-arguments arg-names (cdr def) nil)))
-        (list (mv-let (changedp val)
-                (sublis-var1 arg-alist
-                    (create-cond ctors arg-alist arg-types (cdr def)))
-                (declare (ignore changedp))
-                (conjunct-conds val)) pol))
+    (list (conjunct-conds (create-cond ctors arg-names arg-types (cdr def))) pol)
 )
 
 (defun create-case (ctors arg-names arg-types def pol)
