@@ -125,18 +125,19 @@
     (cond
         ((equal (car def) 'forall)
             (add-conjecture (third def)))
-        ((equal (car def) '=)
-            (list (list 'defthm 'theorem (cons 'equal (cdr def)))))
         (t
-            (list (list 'defthm 'theorem def))))
+            (list (list 'defthm 'theorem def
+                ;':hints '(("Goal" :generalize t))
+            ))))
 )
 
 (defun wrap-conjecture (conj enable)
-    (cond (enable (list (list 'with-output
-            ':off ':all
-            ;; ':on '(prove summary)
-            ':on '(summary)
-            ':gag-mode 'nil (car conj))))
+    (cond (enable (list (list 'with-prover-time-limit 5
+            (list 'with-output
+                ':off ':all
+                ;; ':on '(prove summary)
+                ':on '(summary)
+                ':gag-mode 'nil (car conj)))))
         (t conj))
 )
 
@@ -199,6 +200,7 @@
 (defun create-defun (name args cases)
     (list 'with-output
             ':off ':all
+            ':on '(summary)
             (list 'defun name args (cons 'cond cases)))
 )
 
