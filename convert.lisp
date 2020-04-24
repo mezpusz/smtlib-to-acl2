@@ -248,6 +248,8 @@
                         (definitions->funcs defs)))
 )
 
+; There are a couple of names that may clash with
+; the ACL2 definitions, we simply rename these
 (defun rename-defined-objects (objs)
     (sublis *redefine-list* objs)
 )
