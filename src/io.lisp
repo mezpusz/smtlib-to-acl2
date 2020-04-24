@@ -1,7 +1,6 @@
 (in-package "ACL2")
 
 (set-state-ok t)
-;; :program
 
 (defun read-file1 (current-list channel state)
     (mv-let (eofp obj state)

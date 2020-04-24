@@ -4,9 +4,9 @@
 
 (include-book "oslib/argv" :dir :system)
 
-(include-book "definitions" :load-compiled-file nil)
-(include-book "io" :load-compiled-file nil)
-(include-book "acl2" :load-compiled-file nil)
+(include-book "src/definitions" :load-compiled-file nil)
+(include-book "src/io" :load-compiled-file nil)
+(include-book "src/acl2" :load-compiled-file nil)
 
 ; associates all args with a selector
 ; for their position in the argument list
