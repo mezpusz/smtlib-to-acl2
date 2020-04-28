@@ -11,31 +11,45 @@
           (cons 'false '(not t)))
 )
 
-(defun add-conjecture (def)
+(defun add-conjecture (def opts)
     (cond
         ((equal (car def) 'forall)
-            (add-conjecture (third def)))
-        (t
+            (add-conjecture (third def) opts))
+        ((options->generalize opts)
             (list (list 'defthm 'theorem def
-                ;':hints '(("Goal" :generalize t))
-            ))))
+                ':hints '(("Goal" :generalize t)))))
+        (t
+            (list (list 'defthm 'theorem def))))
 )
 
-(defun wrap-conjecture (conj enable)
-    (cond (enable (list (list 'with-prover-time-limit 5
-            (list 'with-output
-                ':off ':all
-                ;; ':on '(prove summary)
-                ':on '(summary)
-                ':gag-mode 'nil (car conj)))))
+(defun debug-conjecture (conj opts)
+    (list (list 'with-output
+        ':off ':all
+        ':on (cond ((options->debug-theorem opts) '(prove summary))
+                (t '(summary)))
+        ':gag-mode 'nil (car conj)))
+)
+
+(defun time-limit-conjecture (conj opts)
+    (cond
+        ((posp (options->time-limit opts))
+            (list (list 'with-prover-time-limit (options->time-limit opts)
+                (car conj))))
         (t conj))
 )
 
-(defun create-defun (name args cases)
+(defun wrap-conjecture (def opts)
+    (time-limit-conjecture
+        (debug-conjecture
+            (add-conjecture def opts) opts) opts)
+)
+
+(defun create-defun (name args cases opts)
     (list 'with-output
-            ':off ':all
-            ':on '(summary)
-            (list 'defun name args (cons 'cond cases)))
+        ':off ':all
+        ':on (cond ((options->debug-definitions opts) '(prove summary))
+            (t '(summary)))
+        (list 'defun name args (cons 'cond cases)))
 )
 
 (defun add-else-case (cases)
@@ -43,14 +57,14 @@
         (t (cons (car cases) (add-else-case (cdr cases)))))
 )
 
-(defun create-defuns1 (func-list func-alist)
+(defun create-defuns1 (func-list func-alist opts)
     (cond ((null func-list) nil)
         (t (let* (
             (name (caar func-list))
             (args (cadr (assoc-equal name func-alist)))
             (cases (add-else-case (cdar func-list))))
-                (cons (create-defun name args cases)
-                    (create-defuns1 (cdr func-list) func-alist)))))
+                (cons (create-defun name args cases opts)
+                    (create-defuns1 (cdr func-list) func-alist opts)))))
 )
 
 (defun generate-ctor-args (len result)
@@ -76,10 +90,10 @@
         (t (append (create-ctor-defuns1 (cdar type-list)) (create-ctor-defuns (cdr type-list)))))
 )
 
-(defun create-defuns (defs)
+(defun create-defuns (defs opts)
     (append (create-ctor-defuns (definitions->types defs))
         (create-defuns1 (definitions->func-cases defs)
-                        (definitions->funcs defs)))
+                        (definitions->funcs defs) opts))
 )
 
 ; There are a couple of names that may clash with

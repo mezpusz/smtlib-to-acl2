@@ -167,7 +167,7 @@
 ; Process one SMTLIB definition
 ; Only declare-fun, declare-datatypes and assert
 ; definitions are processed otherwise they are thrown away
-(defun process-object (obj defs)
+(defun process-object (obj defs opts)
     (let ((fn (car obj)) (args (cdr obj)))
         (cond
             ((equal fn 'declare-fun)
@@ -185,7 +185,7 @@
                     ((equal (caar args) 'not)
                         (change-definitions defs :conjectures
                             (append (definitions->conjectures defs)
-                                (wrap-conjecture (add-conjecture (cadar args)) t))))
+                                (wrap-conjecture (cadar args) opts))))
                     (t
                         (change-definitions defs :func-cases
                             (process-assert
@@ -194,20 +194,17 @@
             (t defs)))
 )
 
-(defun process-objects (objs defs)
+(defun process-objects (objs defs opts)
     (cond ((null objs) defs)
-        (t (let ((defs (process-object (car objs) defs)))
-            (process-objects (cdr objs) defs))))
+        (t (let ((defs (process-object (car objs) defs opts)))
+            (process-objects (cdr objs) defs opts))))
 )
 
-(defun process-file (filename state)
-    (mv-let (objs state) (read-smt-file filename state)
+(defun process-file (opts state)
+    (mv-let (objs state) (read-smt-file (options->filename opts) state)
         (let* ((proc-objs (rename-defined-objects objs))
-            (defs (process-objects proc-objs (make-definitions :types nil
-                                                          :funcs nil
-                                                          :func-cases nil
-                                                          :conjectures nil))))
-            (mv (append (create-defuns defs)
+            (defs (process-objects proc-objs (make-definitions) opts)))
+            (mv (append (create-defuns defs opts)
                     (definitions->conjectures defs))
                 state)))
 )
@@ -223,6 +220,6 @@
 :q
 (save-exec "smtlib-to-acl2" nil
            :return-from-lp
-           '(mv-let (argv state) (oslib::argv)
-                (mv-let (defs state) (process-file (car argv) state)
+           '(mv-let (opts state) (parse-args state)
+                (mv-let (defs state) (process-file opts state)
                     (ld defs :ld-pre-eval-print t))))
