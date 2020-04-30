@@ -38,7 +38,15 @@
 (defun create-pred (len var)
     (cond ((zp len) (list (list 'endp var)))
         (t (list (list 'consp var)
-            (list 'equal (list 'length var) len))))
+            ; As ACL2 expects total functions, it sometimes
+            ; cannot accept functions which handles only
+            ; one length apart from the base cases. This
+            ; is okay to leave out if there is only one
+            ; non-base ctor but if there are two or more,
+            ; some heuristic will be needed to handle them
+            ; separately
+            ;; (list 'equal (list 'length var) len)
+        )))
 )
 
 ; creates a conjuct for all predicates made for

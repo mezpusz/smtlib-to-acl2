@@ -1,5 +1,10 @@
 #!/bin/bash
 
-set -euo "pipefail"
+set -eo "pipefail"
 
-cat src/convert.lisp | ../acl2/saved_acl2
+if [ -z ${ACL2} ];
+then
+    ACL2=../acl2/saved_acl2;
+fi
+
+cat src/convert.lisp | ${ACL2}

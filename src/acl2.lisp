@@ -62,7 +62,12 @@
         (t (let* (
             (name (caar func-list))
             (args (cadr (assoc-equal name func-alist)))
-            (cases (add-else-case (cdar func-list))))
+            (cases (cdar func-list)))
+            ; As ACL2 expects total functions, in some cases
+            ; the generated functions get better accepted
+            ; if they contain an else branch but more
+            ; experimenting is needed here
+            ;; (cases (add-else-case (cdar func-list))))
                 (cons (create-defun name args cases opts)
                     (create-defuns1 (cdr func-list) func-alist opts)))))
 )
