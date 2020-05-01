@@ -208,6 +208,17 @@
             (process-objects (cdr objs) defs opts))))
 )
 
+; All failed definitions will cause the read-eval-print loop
+; to exit with 1 or otherwise exit with 0 in the end
+(defun add-error-handling (defs)
+    (cond ((null defs) (list '(exit 0)))
+        ((null (car defs)) (add-error-handling (cdr defs)))
+        (t (cons (list 'mv-let '(erp val state) (car defs)
+                '(declare (ignore val))
+                '(prog2$ (if erp (exit 1) nil) state))
+            (add-error-handling (cdr defs)))))
+)
+
 (defun process-file (opts state)
     (mv-let (objs state) (read-smt-file (options->filename opts) state)
         (let* ((proc-objs (rename-defined-objects objs))
@@ -230,4 +241,4 @@
            :return-from-lp
            '(mv-let (opts state) (parse-args state)
                 (mv-let (defs state) (process-file opts state)
-                    (ld defs :ld-pre-eval-print t))))
+                    (ld (add-error-handling defs) :ld-pre-eval-print t))))

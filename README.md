@@ -14,10 +14,9 @@ After setting the environment variable `ACL2` to the appropriate executable for 
 ````bash
 $ ./build.sh
 ````
-This creates a standalone binary and runner script named as `smtlib-to-acl2.core` and `smtlib-to-acl2`, respectively.
-This latter script can be run already, but the user will encounter the ACL2 io-loop after the generated definitions are dealt with and needs to type `(exit)` to get back to the Terminal. For convenience, the user can run the following to exit immediately: 
+This creates a standalone binary and runner script named as `smtlib-to-acl2.core` and `smtlib-to-acl2`, respectively. The user can then run the following to convert one file and give the generated definitions to ACL2:
 ````bash
-$ ./run.sh
+$ ./smtlib-to-acl2 <filename>
 ````
 
 ## Parameters
