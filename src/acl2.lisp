@@ -81,7 +81,7 @@
 (defun create-ctor-defun (name len)
     (cond ((zp len) nil)
         (t (let ((args (generate-ctor-args len nil)))
-            (list 'defun name args (cons 'list args)))))
+            (list 'defun name args (cons 'list (cons (list 'quote name) args))))))
 )
 
 (defun create-ctor-defuns1 (type-list)

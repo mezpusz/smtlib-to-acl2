@@ -30,14 +30,14 @@
         ; associate all subterms with list elements
         (t (map-arguments (cdr arg-names) (cdr args)
             (put-assoc-equal (car args) (car arg-names)
-                (car-cdr-gen (cdar args) (car arg-names) result)))))
+                (car-cdr-gen (cdar args) (list 'cdr (car arg-names)) result)))))
 )
 
 ; creates a predicate for a list variable
 ; based on its length
-(defun create-pred (len var)
-    (cond ((zp len) (list (list 'endp var)))
-        (t (list (list 'consp var)
+(defun create-pred (len var name)
+    (cond ((zp len) (list (list 'endp var) (list 'equal var (list 'quote name))))
+        (t (list (list 'consp var) (list 'equal (list 'car var) (list 'quote name))
             ; As ACL2 expects total functions, it sometimes
             ; cannot accept functions which handles only
             ; one length apart from the base cases. This
@@ -62,11 +62,11 @@
                     ; argument is a compound expression
                     ((listp (car args))
                         (let ((ctor-len (cdr (assoc-equal (caar args) ctor-list))))
-                        (create-pred ctor-len var)))
+                        (create-pred ctor-len var (caar args))))
                     ; argument may be a zero length ctor
                     ((assoc-equal (car args) (cdr (assoc-equal (car arg-types) ctors)))
                         (let ((ctor-len (cdr (assoc-equal (car args) ctor-list))))
-                        (create-pred ctor-len var)))
+                        (create-pred ctor-len var (car args))))
                     ; otherwise it is a variable and it doesn't need any condition
                     (t nil))
                 (create-cond ctors (cdr arg-names) (cdr arg-types) (cdr args))))))
@@ -122,12 +122,16 @@
             (process-ctors (cdr ctors)))))
 )
 
+(defun add-datatype (name types type-alist)
+    (put-assoc-equal name (process-ctors types) type-alist)
+)
+
 ; Converts a list of datatypes to an alist of their names
 ; with an associated alist of ctors and ctor lengths
 (defun add-datatypes1 (names types type-alist)
     (cond ((null names) type-alist)
         (t (add-datatypes1 (cdr names) (cdr types)
-            (put-assoc-equal (caar names) (process-ctors (car types)) type-alist))))
+            (add-datatype (caar names) (car types) type-alist))))
 )
 
 ; Wrapper function for processing datatypes
@@ -172,6 +176,64 @@
                 (list (create-case type-alist (cadr kv) (caddr kv) def 't))) func-cases-alist))
 )
 
+(defun parse-arg-types (args)
+    (cond ((null args) nil)
+        (t (cons (cadar args) (parse-arg-types (cdr args)))))
+)
+
+(defun parse-arg-names (args)
+    (cond ((null args) nil)
+        (t (cons (caar args) (parse-arg-names (cdr args)))))
+)
+
+(defun process-header (name args func-alist)
+    (let ((arg-names (parse-arg-names args))
+        (arg-types (parse-arg-types args)))
+        (put-assoc-equal name (list arg-names arg-types) func-alist))
+)
+
+(mutual-recursion
+(defun process-match-case (var case condition arg-alist)
+    (let ((arg-alist
+            (cond ((listp (car case)) (put-assoc-equal (car case) var 
+                    (car-cdr-gen (car case) (list 'cdr var) arg-alist)))
+                (t arg-alist)))
+        (ctor-len (cond ((listp (car case)) (length (cdar case))) (t 0)))
+        (ctor-name (cond ((listp (car case)) (caar case)) (t (car case)))))
+        (process-block (cadr case)
+            (append (create-pred ctor-len var ctor-name) condition)
+            arg-alist))
+)
+
+(defun process-match (var def condition arg-alist)
+    (cond ((null def) nil)
+        (t (cons (process-match-case var (car def) condition arg-alist)
+            (process-match var (cdr def) condition arg-alist))))
+)
+
+(defun process-block (blk condition arg-alist)
+    (let ((fn (car blk)))
+        (cond ((equal fn 'match) (process-match (cadr blk) (caddr blk) condition arg-alist))
+            ; TODO: handle other keywords
+            (t (list (conjunct-conds condition)
+                (mv-let (changedp val)
+                    (sublis-var1 arg-alist blk)
+                    (declare (ignore changedp))
+                    val)))))
+)
+)
+
+(defun process-rec-fun (def defs)
+    (let* (
+        (name (car def))
+        (args (cadr def))
+        (defs (change-definitions defs :funcs
+            (process-header name args (definitions->funcs defs)))))
+            (change-definitions defs :func-cases
+                (put-assoc-equal name (process-block (cadddr def) nil nil)
+                    (definitions->func-cases defs))))
+)
+
 ; Process one SMTLIB definition
 ; Only declare-fun, declare-datatypes and assert
 ; definitions are processed otherwise they are thrown away
@@ -181,9 +243,14 @@
             ((equal fn 'declare-fun)
                 (change-definitions defs :funcs
                     (process-declare-fun args (definitions->funcs defs))))
+            ((equal fn 'declare-datatype)
+                (change-definitions defs :types
+                    (add-datatype (car args) (cadr args) (definitions->types defs))))
             ((equal fn 'declare-datatypes)
                 (change-definitions defs :types
                     (process-datatypes args (definitions->types defs))))
+            ((equal fn 'define-fun-rec)
+                (process-rec-fun args defs))
             ((equal fn 'assert)
                 (cond
                     ; The conjecture starts with a 'not' in a refutation
