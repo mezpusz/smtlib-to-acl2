@@ -7,6 +7,8 @@
 (defconst *redefine-list*
     (list (cons 'cons 'cons_)
           (cons 't 't_)
+          (cons 'true 't)
+          (cons '=> 'implies)
         ;;   (cons 'nil 'nil_)
           (cons 'equal 'equal_)
           (cons 'false '(not t)))
@@ -20,14 +22,14 @@
             (list (list 'defthm 'theorem def
                 ':hints '(("Goal" :generalize t)))))
         (t
-            (list (list 'defthm 'theorem def))))
+            (list (list 'defthm 'theorem def ':rule-classes 'nil))))
 )
 
 (defun debug-conjecture (conj opts)
     (list (list 'with-output
         ':off ':all
-        ':on (cond ((options->debug-theorem opts) '(prove summary))
-                (t '(summary)))
+        ':on (cond ((options->debug-theorem opts) '(error prove summary))
+                (t '(error summary)))
         ':gag-mode 'nil (car conj)))
 )
 
@@ -48,9 +50,11 @@
 (defun create-defun (name args cases opts)
     (list 'with-output
         ':off ':all
-        ':on (cond ((options->debug-definitions opts) '(prove summary))
-            (t '(summary)))
-        (list 'defun name args (cons 'cond cases)))
+        ':on (cond ((options->debug-definitions opts) '(error prove summary))
+            (t '(error summary)))
+        (list 'defun name args (cond
+            ((equal 1 (length cases)) (cadar cases))
+            (t (cons 'cond cases)))))
 )
 
 (defun create-defuns1 (func-list func-alist opts)
@@ -95,6 +99,17 @@
     (append (create-ctor-defuns (definitions->types defs))
         (create-defuns1 (definitions->func-cases defs)
                         (definitions->funcs defs) opts))
+)
+
+; All failed definitions will cause the read-eval-print loop
+; to exit with 1 or otherwise exit with 0 in the end
+(defun add-error-handling (defs)
+    (cond ((null defs) (list '(exit 0)))
+        ((null (car defs)) (add-error-handling (cdr defs)))
+        (t (cons (list 'mv-let '(erp val state) (car defs)
+                '(declare (ignore val))
+                '(prog2$ (if erp (exit 1) nil) state))
+            (add-error-handling (cdr defs)))))
 )
 
 ; There are a couple of names that may clash with
