@@ -50,7 +50,7 @@
         ':off ':all
         ':on (cond ((options->debug-definitions opts) '(prove summary))
             (t '(summary)))
-        (list 'defun name args (cons 'cond cases))
+        (list 'defun name args (cons 'cond cases)))
 )
 
 (defun create-defuns1 (func-list func-alist opts)

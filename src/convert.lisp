@@ -183,29 +183,37 @@
         (put-assoc-equal name (list arg-names arg-types) func-alist))
 )
 
+(defun update-condition (var arg-names condition ctor-name)
+    (cond ((null arg-names) nil)
+        ((equal var (car arg-names)) (cons ctor-name (cdr condition)))
+        (t (cons (car condition)
+            (update-condition var (cdr arg-names) (cdr condition) ctor-name))))
+)
+
 (mutual-recursion
-(defun process-match-case (var case condition arg-alist)
+(defun process-match-case (var case condition arg-alist arg-names)
     (let ((arg-alist
-            (cond ((listp (car case)) (put-assoc-equal (car case) var 
-                    (car-cdr-gen (car case) (list 'cdr var) arg-alist)))
+            (cond ((listp (car case)) (put-assoc-equal (car case) var
+                    (car-cdr-gen (cdar case) (list 'cdr var) arg-alist)))
                 (t arg-alist)))
         (ctor-name (cond ((listp (car case)) (caar case)) (t (car case)))))
         (process-block (cadr case)
-            (append condition ctor-name)
-            arg-alist))
+            (update-condition var arg-names condition ctor-name)
+            arg-alist arg-names))
 )
 
-(defun process-match (var def condition arg-alist)
+(defun process-match (var def condition arg-alist arg-names)
     (cond ((null def) nil)
-        (t (append (process-match-case var (car def) condition arg-alist)
-            (process-match var (cdr def) condition arg-alist))))
+        (t (append (process-match-case var (car def) condition arg-alist arg-names)
+            (process-match var (cdr def) condition arg-alist arg-names))))
 )
 
-(defun process-block (blk condition arg-alist)
+(defun process-block (blk condition arg-alist arg-names)
     (let ((fn (car blk)))
-        (cond ((equal fn 'match) (process-match (cadr blk) (caddr blk) condition arg-alist))
+        (cond ((equal fn 'match) (process-match (cadr blk) (caddr blk)
+            condition arg-alist arg-names))
             ; TODO: handle other keywords
-            (t (list (list (conjunct-conds condition)
+            (t (list (list condition
                 (mv-let (changedp val)
                     (sublis-var1 arg-alist blk)
                     (declare (ignore changedp))
@@ -226,15 +234,21 @@
             (map-base-cases (cdr types)))))
 )
 
+(defun create-empty-condition (arg-names)
+    (cond ((null arg-names) nil)
+        (t (cons nil (create-empty-condition (cdr arg-names)))))
+)
+
 (defun process-rec-fun (def defs)
     (let* (
         (name (car def))
         (args (cadr def))
         (defs (change-definitions defs :funcs
-            (process-header name args (definitions->funcs defs)))))
+            (process-header name args (definitions->funcs defs))))
+        (arg-names (cadr (assoc-equal name (definitions->funcs defs)))))
             (change-definitions defs :func-cases
-                (put-assoc-equal name (process-block (cadddr def) nil
-                        (map-base-cases (definitions->types defs)))
+                (put-assoc-equal name (process-block (cadddr def) (create-empty-condition arg-names)
+                        (map-base-cases (definitions->types defs)) arg-names)
                     (definitions->func-cases defs))))
 )
 
