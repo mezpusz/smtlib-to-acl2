@@ -7,6 +7,7 @@
 (defconst *redefine-list*
     (list (cons 'cons 'cons_)
           (cons 't 't_)
+        ;;   (cons 'nil 'nil_)
           (cons 'equal 'equal_)
           (cons 'false '(not t)))
 )
@@ -49,12 +50,7 @@
         ':off ':all
         ':on (cond ((options->debug-definitions opts) '(prove summary))
             (t '(summary)))
-        (list 'defun name args (cons 'cond cases)))
-)
-
-(defun add-else-case (cases)
-    (cond ((equal (length cases) 1) (list (list 't (cadar cases))))
-        (t (cons (car cases) (add-else-case (cdr cases)))))
+        (list 'defun name args (cons 'cond cases))
 )
 
 (defun create-defuns1 (func-list func-alist opts)

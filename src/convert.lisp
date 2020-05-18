@@ -34,42 +34,33 @@
 )
 
 ; creates a predicate for a list variable
-; based on its length
-(defun create-pred (len var name)
+; based on its length and name
+(defun create-pred-named (len var name)
     (cond ((zp len) (list (list 'endp var) (list 'equal var (list 'quote name))))
-        (t (list (list 'consp var) (list 'equal (list 'car var) (list 'quote name))
-            ; As ACL2 expects total functions, it sometimes
-            ; cannot accept functions which handles only
-            ; one length apart from the base cases. This
-            ; is okay to leave out if there is only one
-            ; non-base ctor but if there are two or more,
-            ; some heuristic will be needed to handle them
-            ; separately
-            ;; (list 'equal (list 'length var) len)
-        )))
+        (t (list (list 'consp var) (list 'equal (list 'car var) (list 'quote name)))))
+)
+
+(defun create-pred (len var)
+    (cond ((zp len) (list (list 'endp var)))
+        (t (list (list 'consp var))))
 )
 
 ; creates a conjuct for all predicates made for
 ; all arguments in the args based on their types
 ; (which now concerns only the length of ctors)
-(defun create-cond (ctors arg-names arg-types args)
+(defun create-cond (ctors arg-types args)
     ; get ctors for current argument type
-    (let ((ctor-list (cdr (assoc-equal (car arg-types) ctors)))
-        (var (car arg-names)))
+    (let ((ctor-list (cdr (assoc-equal (car arg-types) ctors))))
         (cond ((null args) nil)
-            (t (append
+            (t (cons
                 (cond
                     ; argument is a compound expression
-                    ((listp (car args))
-                        (let ((ctor-len (cdr (assoc-equal (caar args) ctor-list))))
-                        (create-pred ctor-len var (caar args))))
+                    ((listp (car args)) (caar args))
                     ; argument may be a zero length ctor
-                    ((assoc-equal (car args) (cdr (assoc-equal (car arg-types) ctors)))
-                        (let ((ctor-len (cdr (assoc-equal (car args) ctor-list))))
-                        (create-pred ctor-len var (car args))))
+                    ((assoc-equal (car args) ctor-list) (car args))
                     ; otherwise it is a variable and it doesn't need any condition
                     (t nil))
-                (create-cond ctors (cdr arg-names) (cdr arg-types) (cdr args))))))
+                (create-cond ctors (cdr arg-types) (cdr args))))))
 )
 
 ; Add (and ...) wrapper to conditions if there are more than one
@@ -83,7 +74,7 @@
 (defun create-case-eq (ctors arg-names arg-types def)
     ; map arguments of the left hand side to function variables or list expressions
     (let ((arg-alist (map-arguments arg-names (cdr (second def)) nil)))
-        (list (conjunct-conds (create-cond ctors arg-names arg-types (cdr (second def))))
+        (list (create-cond ctors arg-types (cdr (second def)))
             ; change arguments to mapped values in right hand side
             ; TODO: find out why this doesn't work with sublis
             (mv-let (changedp val)
@@ -93,10 +84,10 @@
 )
 
 ; Creates a (condition term) pair from a non-equality (predicate formula)
-(defun create-case-formula (ctors arg-names arg-types def pol)
+(defun create-case-formula (ctors arg-types def pol)
     ; Here the trick is we create the condition from the formula itself
     ; and return the current polarity (this may not work in some cases)
-    (list (conjunct-conds (create-cond ctors arg-names arg-types (cdr def))) pol)
+    (list (create-cond ctors arg-types (cdr def)) pol)
 )
 
 ; Creates a function case
@@ -111,7 +102,7 @@
             ; TODO: find out how to handle polarity here
             (create-case-eq ctors arg-names arg-types def))
         (t
-            (create-case-formula ctors arg-names arg-types def pol)))
+            (create-case-formula ctors arg-types def pol)))
 )
 
 ; Converts a list of ctors, e.g. ((zero) (s (s0 nat)))
@@ -198,16 +189,15 @@
             (cond ((listp (car case)) (put-assoc-equal (car case) var 
                     (car-cdr-gen (car case) (list 'cdr var) arg-alist)))
                 (t arg-alist)))
-        (ctor-len (cond ((listp (car case)) (length (cdar case))) (t 0)))
         (ctor-name (cond ((listp (car case)) (caar case)) (t (car case)))))
         (process-block (cadr case)
-            (append (create-pred ctor-len var ctor-name) condition)
+            (append condition ctor-name)
             arg-alist))
 )
 
 (defun process-match (var def condition arg-alist)
     (cond ((null def) nil)
-        (t (cons (process-match-case var (car def) condition arg-alist)
+        (t (append (process-match-case var (car def) condition arg-alist)
             (process-match var (cdr def) condition arg-alist))))
 )
 
@@ -215,12 +205,25 @@
     (let ((fn (car blk)))
         (cond ((equal fn 'match) (process-match (cadr blk) (caddr blk) condition arg-alist))
             ; TODO: handle other keywords
-            (t (list (conjunct-conds condition)
+            (t (list (list (conjunct-conds condition)
                 (mv-let (changedp val)
                     (sublis-var1 arg-alist blk)
                     (declare (ignore changedp))
-                    val)))))
+                    val))))))
 )
+)
+
+(defun map-base-cases1 (type)
+    (cond ((null type) nil)
+        ((zp (cdar type)) (put-assoc-equal (caar type) (list 'quote (caar type))
+            (map-base-cases1 (cdr type))))
+        (t (map-base-cases1 (cdr type))))
+)
+
+(defun map-base-cases (types)
+    (cond ((null types) nil)
+        (t (append (map-base-cases1 (car types))
+            (map-base-cases (cdr types)))))
 )
 
 (defun process-rec-fun (def defs)
@@ -230,7 +233,8 @@
         (defs (change-definitions defs :funcs
             (process-header name args (definitions->funcs defs)))))
             (change-definitions defs :func-cases
-                (put-assoc-equal name (process-block (cadddr def) nil nil)
+                (put-assoc-equal name (process-block (cadddr def) nil
+                        (map-base-cases (definitions->types defs)))
                     (definitions->func-cases defs))))
 )
 
@@ -251,6 +255,10 @@
                     (process-datatypes args (definitions->types defs))))
             ((equal fn 'define-fun-rec)
                 (process-rec-fun args defs))
+            ((equal fn 'prove)
+                (change-definitions defs :conjectures
+                    (append (definitions->conjectures defs)
+                        (wrap-conjecture (car args) opts))))
             ((equal fn 'assert)
                 (cond
                     ; The conjecture starts with a 'not' in a refutation
@@ -286,11 +294,79 @@
             (add-error-handling (cdr defs)))))
 )
 
+(defun is-similar-case (arg case other arg-names arg-types type-alist)
+    (cond ((null case) t)
+        (t (let ((arg1 (car case)) (arg2 (car other))
+                (ctor-list (cdr (assoc-equal (car arg-types) type-alist))))
+            (cond ((or (equal arg1 arg2) ; same case
+                    ; or selected argument position in this and in other case
+                    ; are both base cases or recursive cases
+                    (and (equal arg (car arg-names))
+                        (assoc-equal arg1 ctor-list) (assoc-equal arg2 ctor-list)
+                        (equal (zp (cdr (assoc-equal arg1 ctor-list)))
+                            (zp (cdr (assoc-equal arg2 ctor-list))))))
+                    (is-similar-case arg (cdr case) (cdr other) (cdr arg-names)
+                        (cdr arg-types) type-alist))
+                    (t nil)))))
+)
+
+(defun is-last-case (arg case next-cases arg-names arg-types type-alist)
+    (cond ((null next-cases) t)
+        (t (and (not (is-similar-case arg (car case) (caar next-cases) arg-names arg-types type-alist))
+            (is-last-case arg case (cdr next-cases) arg-names arg-types type-alist))))
+)
+
+(defun create-function-case-cond (arg-names conds case next-cases arg-names-orig arg-types type-alist)
+    (cond ((null conds) nil)
+        ((null (car conds)) (create-function-case-cond (cdr arg-names) (cdr conds)
+            case next-cases arg-names-orig arg-types type-alist))
+        (t (let* ((ctor-list (cdr (assoc-equal (car arg-types) type-alist)))
+            (ctor-len (cdr (assoc-equal (car conds) ctor-list))))
+            (append (cond ((is-last-case (car arg-names) case
+                                next-cases arg-names-orig arg-types type-alist)
+                            (create-pred ctor-len (car arg-names)))
+                        (t (create-pred-named ctor-len (car arg-names) (car conds))))
+                (create-function-case-cond (cdr arg-names) (cdr conds)
+                    case next-cases arg-names-orig arg-types type-alist)))))
+)
+
+(defun postprocess-function-case (case next-cases arg-names arg-types type-alist)
+    (cons (conjunct-conds
+        (create-function-case-cond arg-names (car case) case next-cases arg-names arg-types type-alist))
+        (cdr case))
+)
+
+(defun postprocess-function-cases2 (arg-names arg-types cases type-alist)
+    (cond ((null cases) nil)
+        (t (cons (postprocess-function-case
+            (car cases) (cdr cases) arg-names arg-types type-alist)
+            (postprocess-function-cases2 arg-names arg-types (cdr cases) type-alist))))
+)
+
+(defun postprocess-function-cases1 (funcs func-cases type-alist)
+    (cond ((null funcs) nil)
+        (t (let* ((current (car funcs))
+            (name (car current))
+            (arg-names (cadr current))
+            (arg-types (caddr current))
+            (cases (cdr (assoc-equal name func-cases))))
+            (put-assoc-equal name (postprocess-function-cases2 arg-names arg-types cases type-alist)
+                (postprocess-function-cases1 (cdr funcs) func-cases type-alist)))))
+)
+
+(defun postprocess-function-cases (defs)
+    (let ((funcs (definitions->funcs defs))
+        (func-cases (definitions->func-cases defs))
+        (types (definitions->types defs)))
+        (change-definitions defs :func-cases
+            (reverse (postprocess-function-cases1 funcs func-cases types))))
+)
+
 (defun process-file (opts state)
     (mv-let (objs state) (read-smt-file (options->filename opts) state)
         (let* ((proc-objs (rename-defined-objects objs))
             (defs (process-objects proc-objs (make-definitions) opts)))
-            (mv (append (create-defuns defs opts)
+            (mv (append (create-defuns (postprocess-function-cases defs) opts)
                     (definitions->conjectures defs))
                 state)))
 )
