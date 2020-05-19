@@ -57,12 +57,7 @@
     ; map arguments of the left hand side to function variables or list expressions
     (let ((arg-alist (map-arguments arg-names (cdr (second def)) nil)))
         (list (create-cond ctors arg-types (cdr (second def)))
-            ; change arguments to mapped values in right hand side
-            ; TODO: find out why this doesn't work with sublis
-            (mv-let (changedp val)
-                (sublis-var1 arg-alist (third def))
-                (declare (ignore changedp))
-                val)))
+                (sublis-var arg-alist (third def))))
 )
 
 ; Creates a (condition term) pair from a non-equality (predicate formula)
@@ -96,7 +91,9 @@
 )
 
 (defun add-datatype (name types type-alist)
-    (put-assoc-equal name (process-ctors types) type-alist)
+    (cond ((equal (car types) 'par)
+        (add-datatype name (caddr types) type-alist))
+        (t (put-assoc-equal name (process-ctors types) type-alist)))
 )
 
 ; Converts a list of datatypes to an alist of their names
@@ -151,7 +148,11 @@
 
 (defun parse-arg-types (args)
     (cond ((null args) nil)
-        (t (cons (cadar args) (parse-arg-types (cdr args)))))
+        (t (let ((type (cadar args)))
+            (cons
+                (cond ((listp type) (car type))
+                    (t type))
+                (parse-arg-types (cdr args))))))
 )
 
 (defun parse-arg-names (args)
@@ -195,11 +196,7 @@
         (cond ((equal fn 'match) (process-match (cadr blk) (caddr blk)
             condition arg-alist arg-names))
             ; TODO: handle other keywords
-            (t (list (list condition
-                (mv-let (changedp val)
-                    (sublis-var1 arg-alist blk)
-                    (declare (ignore changedp))
-                    val))))))
+            (t (list (list condition (sublis-var arg-alist (remove-underscored blk)))))))
 )
 )
 
@@ -225,11 +222,14 @@
     (let* (
         (name (car def))
         (args (cadr def))
+        (par (equal (car args) 'par))
+        (args (cond (par (caaddr args)) (t args)))
+        (blk (cond (par (caddr def)) (t (cadddr def))))
         (defs (change-definitions defs :funcs
             (process-header name args (definitions->funcs defs))))
         (arg-names (cadr (assoc-equal name (definitions->funcs defs)))))
             (change-definitions defs :func-cases
-                (put-assoc-equal name (process-block (cadddr def) (create-empty-condition arg-names)
+                (put-assoc-equal name (process-block blk (create-empty-condition arg-names)
                         (map-base-cases (definitions->types defs)) arg-names)
                     (definitions->func-cases defs))))
 )
@@ -256,7 +256,8 @@
             ((equal fn 'prove)
                 (change-definitions defs :conjectures
                     (append (definitions->conjectures defs)
-                        (wrap-conjecture (car args) opts))))
+                        (wrap-conjecture (car args)
+                            (map-base-cases (definitions->types defs)) opts))))
             ((equal fn 'assert)
                 (cond
                     ; The conjecture starts with a 'not' in a refutation
@@ -266,7 +267,8 @@
                     ((equal (caar args) 'not)
                         (change-definitions defs :conjectures
                             (append (definitions->conjectures defs)
-                                (wrap-conjecture (cadar args) opts))))
+                                (wrap-conjecture (cadar args)
+                                    (map-base-cases (definitions->types defs)) opts))))
                     (t
                         (change-definitions defs :func-cases
                             (process-assert

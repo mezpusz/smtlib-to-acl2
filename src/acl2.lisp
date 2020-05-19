@@ -9,20 +9,39 @@
           (cons 't 't_)
           (cons 'true 't)
           (cons '=> 'implies)
-        ;;   (cons 'nil 'nil_)
+          (cons '++ '++_)
+          (cons 'nil 'nil_)
           (cons 'equal 'equal_)
           (cons 'false '(not t)))
 )
 
-(defun add-conjecture (def opts)
+(mutual-recursion
+(defun remove-underscored (term)
+    (cond ((variablep term) term)
+        ((fquotep term) term)
+        ((equal (car term) '_) (remove-underscored (cadr term)))
+        (t (cons (car term)
+            (remove-underscored-lst (cdr term)))))
+)
+
+(defun remove-underscored-lst (lst)
+    (cond ((null lst) nil)
+        (t (cons (remove-underscored (car lst))
+            (remove-underscored-lst (cdr lst)))))
+)
+)
+
+(defun add-conjecture (def alist opts)
     (cond
-        ((equal (car def) 'forall)
-            (add-conjecture (third def) opts))
-        ((options->generalize opts)
-            (list (list 'defthm 'theorem def
-                ':hints '(("Goal" :generalize t)))))
-        (t
-            (list (list 'defthm 'theorem def ':rule-classes 'nil))))
+        ((or (equal (car def) 'forall) (equal (car def) 'par))
+            (add-conjecture (third def) alist opts))
+        (t (let ((def (remove-underscored (sublis-var alist def))))
+            (cond
+                ((options->generalize opts)
+                    (list (list 'defthm 'theorem def
+                        ':hints '(("Goal" :generalize t)))))
+                (t
+                    (list (list 'defthm 'theorem def ':rule-classes 'nil)))))))
 )
 
 (defun debug-conjecture (conj opts)
@@ -41,10 +60,10 @@
         (t conj))
 )
 
-(defun wrap-conjecture (def opts)
+(defun wrap-conjecture (def alist opts)
     (time-limit-conjecture
         (debug-conjecture
-            (add-conjecture def opts) opts) opts)
+            (add-conjecture def alist opts) opts) opts)
 )
 
 (defun create-defun (name args cases opts)
@@ -112,8 +131,25 @@
             (add-error-handling (cdr defs)))))
 )
 
+(mutual-recursion
+(defun sublis-nil (alist term)
+    (let ((temp (assoc-equal term alist)))
+        (cond (temp (cdr temp))
+            ((variablep term) term)
+            ((fquotep term) term)
+            (t (cons-term (sublis-nil alist (car term))
+                (sublis-nil-lst alist (cdr term))))))
+)
+
+(defun sublis-nil-lst (alist lst)
+    (cond ((null lst) nil)
+        (t (cons (sublis-nil alist (car lst))
+            (sublis-nil-lst alist (cdr lst)))))
+)
+)
+
 ; There are a couple of names that may clash with
 ; the ACL2 definitions, we simply rename these
 (defun rename-defined-objects (objs)
-    (sublis *redefine-list* objs)
+    (sublis-nil-lst *redefine-list* objs)
 )
